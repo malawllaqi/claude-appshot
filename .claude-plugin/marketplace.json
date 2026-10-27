@@ -1,0 +1,13 @@
+{
+  "name": "claude-appshot",
+  "description": "Appshots for Claude Code: send your frontmost Mac window (image + text) to Claude",
+  "owner": {
+    "name": "malawllaqi"
+  },
+  "plugins": [
+    {
+      "name": "appshot",
+      "source": "./"
+    }
+  ]
+}

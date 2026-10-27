@@ -44,10 +44,14 @@ then Add plugin.
 - `/appshot` in Claude: capture the window behind Claude.
 - `/appshot <question>`: capture it and send the question right away.
 
-With several Claude sessions open, the capture goes to the one you last
-opened, switched to or typed in. A capture only ever waits in the band;
-nothing is sent until you send it (`/appshot <question>` aside). Captures are kept in `~/Library/Application Support/AppShot/claimed/`;
-ones nobody picks up within 10 minutes move to `expired/`.
+The capture goes to the session on screen. The Claude desktop app starts a
+session only when you send its first message, so in a session you just
+opened the capture waits, and that first message picks it up and carries it.
+Every sent message that carried captures shows their thumbnails under it.
+A capture only ever waits; nothing is sent until you send it
+(`/appshot <question>` aside). Captures are kept in
+`~/Library/Application Support/AppShot/claimed/`; ones nobody picks up within
+10 minutes move to `expired/`.
 
 ## Notes
 

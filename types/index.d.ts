@@ -12,8 +12,11 @@ export type PendingShot = {
   thumbHeight: number
 }
 
+/** The captures each sent message carried, by the stored row's uuid, newest last. */
+export type AttachedShots = { uuid: string; shots: PendingShot[] }[]
+
 declare module 'claude-code' {
   interface PluginState {
-    appshot: { pending: PendingShot[] }
+    appshot: { pending: PendingShot[]; attached: AttachedShots }
   }
 }

@@ -49,8 +49,8 @@ function world(on: On, sessionId = 'me') {
   mock.env(on, { HOME: '/h' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
-  // No window shows the session unless a test says so: the band must wait anyway.
-  let surfaces: readonly ('desktop' | 'terminal')[] = []
+  // A window shows the session unless a test says otherwise.
+  let surfaces: readonly ('desktop' | 'terminal')[] = ['desktop']
   on('session.surfaces', () => ({ value: surfaces }))
   on('command.register', () => ({ value: { command: 'appshot' } }))
   on('fs.write', (_, e) => (files.set(e.path, e.text), { value: undefined }))
@@ -207,19 +207,75 @@ test('the x on a thumbnail drops the capture before it is sent', async ($, on) =
   expect(w.submits.at(-1)?.context).toBeUndefined()
 })
 
-test('a capture waits in the band while no window shows the session', async ($, on) => {
+// A sent message that carried a capture shows its thumbnail under the row.
+test('a sent message shows the captures it carried', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)
-  await $.session.start({ cwd: '/', surface: null, isInteractive: true })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: false })
+  w.drop(META)
+  await clock.advance(250)
+
+  const text = 'why so expensive?'
+  await $.prompt.submit(submit(text))
+  const row = (uuid: string, said: string) => ({
+    message: { type: 'user' as const, role: 'user' as const, content: [{ type: 'text' as const, text: said }] },
+    door: 'prompt' as const,
+    origin: { kind: 'composer' as const },
+    uuid,
+  })
+  const stored = await $.session.append(row('row-1', text))
+  expect(stored.uuid).toBe('row-1')
+  await $.session.append(row('row-2', 'and a later message'))
+
+  const message = (requestId: string, said: string) => ({
+    plugin: 'appshot',
+    component: 'UserMessage',
+    requestId,
+    props: { text: said, origin: { kind: 'composer' }, isExpanded: false },
+  }) as const
+
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const carried = await $.ui.mount({ ...message('row-1', text), surface })
+    expect((await carried.find({ type: surface === 'desktop' ? 'Svg' : 'Image' }))?.props.alt).toBe(
+      `Appshot: ${label(META)}`,
+    )
+    expect(await carried.find({ type: 'Text', text: /engine/ })).toBeDefined()
+    await carried.unmount()
+
+    const later = await $.ui.mount({ ...message('row-2', 'and a later message'), surface })
+    expect(await later.find({ type: surface === 'desktop' ? 'Svg' : 'Image' })).toBeUndefined()
+    await later.unmount()
+  }
+})
+
+test('a session nobody is looking at leaves the capture for one that is', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  w.show(false)
 
   w.drop(META)
-  await clock.advance(1000)
-  expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
+  await clock.advance(5000)
+  expect(w.files.has(`${ROOT}/inbox/${ID}/meta.json`)).toBe(true)
   expect(w.submits).toEqual([])
+})
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await ui.find({ key: `remove-${ID}` })).toBeDefined()
-  await ui.unmount()
+// The desktop app starts a session's engine with its first message: a capture
+// taken before then waits, and that first message carries it.
+test('the first message sent picks up a waiting capture and carries it', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  w.drop(META)
+  w.show(false)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: false })
+  await clock.advance(250)
+  expect(w.files.has(`${ROOT}/inbox/${ID}/meta.json`)).toBe(true)
+
+  await $.prompt.submit(submit('what is this page?'))
+  expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
+  const sent = w.submits.at(-1)
+  expect(sent?.text).toBe('what is this page?')
+  expect(sent?.context?.[0]).toContain(`${ROOT}/claimed/${ID}/shot.png`)
 })
 
 // The desktop app starts its sessions as a program would: isInteractive false.
@@ -237,6 +293,7 @@ test('a capture never sends itself, even where the session is not interactive', 
 test('the session a window switches to is the one captures go to', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)
+  w.show(false)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: false })
   w.files.set(`${ROOT}/active-session.json`, JSON.stringify({ sessionId: 'other', at: NOW }))
 
@@ -252,10 +309,12 @@ test('the session a window switches to is the one captures go to', async ($, on)
   expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
 })
 
+// Two sessions on screen at once (split view): the one used last goes first.
 test('another session that was used last gets the first claim', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.advance(250)
   w.files.set(`${ROOT}/active-session.json`, JSON.stringify({ sessionId: 'other', at: NOW }))
 
   w.drop(META)

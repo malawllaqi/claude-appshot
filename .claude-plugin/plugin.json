@@ -1,6 +1,6 @@
 {
   "name": "appshot",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "license": "MIT",
   "description": "Appshots for Claude: attach your frontmost window (image + text) from a Hammerspoon hotkey or /appshot",
   "author": {

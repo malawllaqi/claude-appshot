@@ -40,6 +40,9 @@ let paths: Paths | undefined
 let sessionId = ''
 let timer: Timer | undefined
 let isPolling = false
+// Whether a person drives this session (any surface, shown now or not); a
+// scripted run (`claude -p`, an SDK host) has nobody to see the band.
+let isInteractive = true
 // Set by /appshot: the question to send with the capture it asked for.
 let asking: { question: string | undefined; since: number } | undefined
 
@@ -117,9 +120,10 @@ async function deliver($: EngineInterface, p: Paths, meta: AppshotMeta): Promise
   const dir = `${p.claimed}/${meta.id}`
   const asked = asking
   asking = undefined
-  const hasPrompt = (await $.session.surfaces()).length > 0
 
-  if (asked?.question === undefined && hasPrompt) {
+  // The band waits even while no window shows this session: it is drawn
+  // once one does, and the capture goes with the next message sent.
+  if (asked?.question === undefined && isInteractive) {
     const shot = await makeThumbs($, dir, meta)
     await update($, pending, list =>
       [...list.filter(one => one.id !== shot.id), shot].slice(-MAX_PENDING),
@@ -128,7 +132,7 @@ async function deliver($: EngineInterface, p: Paths, meta: AppshotMeta): Promise
     return
   }
 
-  // A question came with /appshot, or no surface shows a prompt box: send it now.
+  // A question came with /appshot, or nobody drives this session: send it now.
   const text = await readText($, dir, meta)
   await $.prompt.submit({
     text: `${asked?.question ?? DEFAULT_QUESTION}\n\n${details(meta, dir, text)}`,
@@ -188,7 +192,8 @@ export const register: Register = on => {
     paths = await resolvePaths($)
     sessionId = await $.session.id()
     await $.process.run(['/bin/mkdir', '-p', paths.inbox, paths.claimed, paths.expired])
-    if (e.isInteractive) await markActive($)
+    isInteractive = e.isInteractive
+    if (isInteractive) await markActive($)
 
     timer?.cancel()
     timer = $.clock.every(POLL_MS, () => void poll($))

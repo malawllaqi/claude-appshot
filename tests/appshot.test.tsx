@@ -49,7 +49,8 @@ function world(on: On, sessionId = 'me') {
   mock.env(on, { HOME: '/h' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
-  on('session.surfaces', () => ({ value: ['desktop'] as const }))
+  // No window shows the session while a capture arrives: the band must wait anyway.
+  on('session.surfaces', () => ({ value: [] as const }))
   on('command.register', () => ({ value: { command: 'appshot' } }))
   on('fs.write', (_, e) => (files.set(e.path, e.text), { value: undefined }))
   on('fs.read', (_, e) => {
@@ -200,6 +201,33 @@ test('the x on a thumbnail drops the capture before it is sent', async ($, on) =
 
   await $.prompt.submit(submit('hello'))
   expect(w.submits.at(-1)?.context).toBeUndefined()
+})
+
+test('a capture waits in the band while no window shows the session', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: true })
+
+  w.drop(META)
+  await clock.advance(1000)
+  expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
+  expect(w.submits).toEqual([])
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: `remove-${ID}` })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a scripted session sends a capture at once, with nobody to see the band', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+
+  w.drop(META)
+  await clock.advance(1000)
+  const sent = w.submits.at(-1)
+  expect(sent?.text.startsWith('Here is an appshot of a window on my Mac.')).toBe(true)
+  expect(sent?.text).toContain('Pro plan $20 per month')
 })
 
 test('another session that was used last gets the first claim', async ($, on) => {

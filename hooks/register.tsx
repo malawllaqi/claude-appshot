@@ -22,7 +22,6 @@ import {
 
 type Paths = { root: string; inbox: string; claimed: string; expired: string; active: string }
 
-const DEFAULT_QUESTION = 'Here is an appshot of a window on my Mac. Look at it and tell me what matters.'
 const WAIT_FOR_HELPER_MS = 8000
 // How often the inbox is listed: one directory read, cheap enough to do often.
 const POLL_MS = 250
@@ -40,9 +39,9 @@ let paths: Paths | undefined
 let sessionId = ''
 let timer: Timer | undefined
 let isPolling = false
-// Whether a person drives this session (any surface, shown now or not); a
-// scripted run (`claude -p`, an SDK host) has nobody to see the band.
-let isInteractive = true
+// Whether a window showed this session at the last poll: the session the
+// person switches to becomes the one the next capture goes to.
+let isShown = false
 // Set by /appshot: the question to send with the capture it asked for.
 let asking: { question: string | undefined; since: number } | undefined
 
@@ -121,23 +120,21 @@ async function deliver($: EngineInterface, p: Paths, meta: AppshotMeta): Promise
   const asked = asking
   asking = undefined
 
-  // The band waits even while no window shows this session: it is drawn
-  // once one does, and the capture goes with the next message sent.
-  if (asked?.question === undefined && isInteractive) {
-    const shot = await makeThumbs($, dir, meta)
-    await update($, pending, list =>
-      [...list.filter(one => one.id !== shot.id), shot].slice(-MAX_PENDING),
-    )
-    $.ui.toast(`Appshot attached: ${shot.label}. It goes with your next message.`)
+  // `/appshot <question>` asked to send it now; nothing else ever sends a
+  // message the person did not.
+  if (asked?.question !== undefined) {
+    const text = await readText($, dir, meta)
+    await $.prompt.submit({ text: `${asked.question}\n\n${details(meta, dir, text)}`, asUser: true })
     return
   }
 
-  // A question came with /appshot, or nobody drives this session: send it now.
-  const text = await readText($, dir, meta)
-  await $.prompt.submit({
-    text: `${asked?.question ?? DEFAULT_QUESTION}\n\n${details(meta, dir, text)}`,
-    asUser: true,
-  })
+  // The band waits even while no window shows this session: it is drawn
+  // once one does, and the capture goes with the next message sent.
+  const shot = await makeThumbs($, dir, meta)
+  await update($, pending, list =>
+    [...list.filter(one => one.id !== shot.id), shot].slice(-MAX_PENDING),
+  )
+  $.ui.toast(`Appshot attached: ${shot.label}. It goes with your next message.`)
 }
 
 async function poll($: EngineInterface): Promise<void> {
@@ -146,6 +143,10 @@ async function poll($: EngineInterface): Promise<void> {
   isPolling = true
   try {
     const now = await $.clock.now()
+    const shown = (await $.session.surfaces()).length > 0
+    if (shown && !isShown) await markActive($)
+    isShown = shown
+
     if (asking && now - asking.since > WAIT_FOR_HELPER_MS) {
       asking = undefined
       $.ui.toast(
@@ -192,8 +193,8 @@ export const register: Register = on => {
     paths = await resolvePaths($)
     sessionId = await $.session.id()
     await $.process.run(['/bin/mkdir', '-p', paths.inbox, paths.claimed, paths.expired])
-    isInteractive = e.isInteractive
-    if (isInteractive) await markActive($)
+    // A session just opened is the one the person is in.
+    await markActive($)
 
     timer?.cancel()
     timer = $.clock.every(POLL_MS, () => void poll($))

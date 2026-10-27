@@ -49,8 +49,9 @@ function world(on: On, sessionId = 'me') {
   mock.env(on, { HOME: '/h' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
-  // No window shows the session while a capture arrives: the band must wait anyway.
-  on('session.surfaces', () => ({ value: [] as const }))
+  // No window shows the session unless a test says so: the band must wait anyway.
+  let surfaces: readonly ('desktop' | 'terminal')[] = []
+  on('session.surfaces', () => ({ value: surfaces }))
   on('command.register', () => ({ value: { command: 'appshot' } }))
   on('fs.write', (_, e) => (files.set(e.path, e.text), { value: undefined }))
   on('fs.read', (_, e) => {
@@ -97,7 +98,10 @@ function world(on: On, sessionId = 'me') {
     files.set(`${ROOT}/inbox/${meta.id}/meta.json`, JSON.stringify(meta))
     files.set(`${ROOT}/inbox/${meta.id}/text.txt`, text)
   }
-  return { files, submits, opened, drop }
+  const show = (on: boolean) => {
+    surfaces = on ? ['desktop'] : []
+  }
+  return { files, submits, opened, drop, show }
 }
 
 const submit = (text: string) => ({ text, wait: false, origin: { kind: 'composer' } as const })
@@ -218,16 +222,34 @@ test('a capture waits in the band while no window shows the session', async ($, 
   await ui.unmount()
 })
 
-test('a scripted session sends a capture at once, with nobody to see the band', async ($, on) => {
+// The desktop app starts its sessions as a program would: isInteractive false.
+test('a capture never sends itself, even where the session is not interactive', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)
   await $.session.start({ cwd: '/', surface: null, isInteractive: false })
 
   w.drop(META)
   await clock.advance(1000)
-  const sent = w.submits.at(-1)
-  expect(sent?.text.startsWith('Here is an appshot of a window on my Mac.')).toBe(true)
-  expect(sent?.text).toContain('Pro plan $20 per month')
+  expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
+  expect(w.submits).toEqual([])
+})
+
+test('the session a window switches to is the one captures go to', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: false })
+  w.files.set(`${ROOT}/active-session.json`, JSON.stringify({ sessionId: 'other', at: NOW }))
+
+  await clock.advance(250)
+  expect(JSON.parse(w.files.get(`${ROOT}/active-session.json`) as string).sessionId).toBe('other')
+
+  w.show(true)
+  await clock.advance(250)
+  expect(JSON.parse(w.files.get(`${ROOT}/active-session.json`) as string).sessionId).toBe('me')
+
+  w.drop(META)
+  await clock.advance(250)
+  expect(w.files.has(`${ROOT}/claimed/${ID}/meta.json`)).toBe(true)
 })
 
 test('another session that was used last gets the first claim', async ($, on) => {

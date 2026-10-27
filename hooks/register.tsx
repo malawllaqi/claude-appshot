@@ -247,7 +247,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="row" gap={2}>
           {shots.map(shot => (
-            <Box key={`shot-${shot.id}`} flexDirection="column">
+            <Box key={`shot-${shot.id}`} flexDirection="row" alignItems="flex-start">
               {shot.thumbPng ? (
                 <Image
                   key={`img-${shot.id}`}
@@ -259,7 +259,8 @@ export const register: Register = on => {
               ) : (
                 <Text>Appshot: {shot.label}</Text>
               )}
-              <Button key={`remove-${shot.id}`} label="Remove" onPress={remove(shot.id)} />
+              {/* A terminal image hides text drawn over it, so the x sits beside its corner. */}
+              <Button key={`remove-${shot.id}`} label="✕" plain onPress={remove(shot.id)} />
             </Box>
           ))}
         </Box>
@@ -270,7 +271,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="row" gap={2}>
         {shots.map(shot => (
-          <Box key={`shot-${shot.id}`} flexDirection="column" gap={1}>
+          <Box key={`shot-${shot.id}`} position="relative">
             {shot.thumbJpeg ? (
               <Svg
                 source={thumbSvg(shot.thumbJpeg, shot.thumbWidth, shot.thumbHeight)}
@@ -281,7 +282,10 @@ export const register: Register = on => {
             ) : (
               <Text>Appshot: {shot.label}</Text>
             )}
-            <Button key={`remove-${shot.id}`} label="Remove" onPress={remove(shot.id)} />
+            {/* The close control in the thumbnail's top-right corner. */}
+            <Box position="absolute" top={0} right={0}>
+              <Button key={`remove-${shot.id}`} label="✕" role="dismiss" plain onPress={remove(shot.id)} />
+            </Box>
           </Box>
         ))}
       </Box>

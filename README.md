@@ -4,7 +4,9 @@ Appshots for Claude Code on macOS: press both Command keys in any app and the
 frontmost window (a screenshot plus the text macOS Accessibility exposes) lands
 in the Claude session you used last, as a thumbnail above the prompt box. Type
 your question and send; the capture goes with that message, its screenshot and
-window text for Claude. Remove under a thumbnail drops it before you send.
+window text for Claude. The x on a thumbnail's corner drops it before you send.
+
+![An appshot waiting above the Claude prompt box: a thumbnail of the captured window with an x in its corner](docs/appshot-band.png)
 
 It has two parts: this Claude Code mod, and a small Hammerspoon script
 (`hammerspoon/appshot.lua`) that owns the system-wide hotkey and the capture.

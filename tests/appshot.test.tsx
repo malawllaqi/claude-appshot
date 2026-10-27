@@ -179,14 +179,21 @@ test('the band keeps only the newest 3 captures', async ($, on) => {
   expect(context.map(block => block.slice(8, 28))).toEqual(ids.slice(2))
 })
 
-test('Remove drops a capture before it is sent', async ($, on) => {
+test('the x on a thumbnail drops the capture before it is sent', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   w.drop(META)
   await clock.advance(1000)
 
+  const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await terminal.find({ key: `remove-${ID}` }))?.props.label).toBe('✕')
+  await terminal.unmount()
+
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const x = await ui.find({ key: `remove-${ID}` })
+  expect(x?.props.label).toBe('✕')
+  expect(x?.props.role).toBe('dismiss')
   await ui.press({ key: `remove-${ID}` })
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   await ui.unmount()

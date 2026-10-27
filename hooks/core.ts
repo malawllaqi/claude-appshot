@@ -27,7 +27,6 @@ export const STALE_MS = 10 * 60 * 1000
 export const INLINE_TEXT_CHARS = 20000
 
 const ID = /^\d{8}-\d{6}-[0-9a-f]{4}$/
-const MARKER = /\[appshot (\d{8}-\d{6}-[0-9a-f]{4})[^\]]*\]/g
 
 export const isCaptureId = (name: string): boolean => ID.test(name)
 
@@ -50,13 +49,24 @@ export function label(meta: AppshotMeta): string {
   return short ? `${meta.app} — ${short}` : meta.app
 }
 
-/** The short token put in the prompt box; `prompt.submit` expands it. */
-export const marker = (meta: AppshotMeta): string =>
-  `[appshot ${meta.id} · ${label(meta).replaceAll(']', ')')}]`
+/** The thumbnail's pixel size: the longest side `side`, the capture's shape kept. */
+export function thumbSize(meta: AppshotMeta, side: number): { width: number; height: number } {
+  const w = meta.imageWidth ?? 16
+  const h = meta.imageHeight ?? 10
+  const scale = side / Math.max(w, h)
+  return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) }
+}
 
-export const markerIds = (text: string): string[] => [
-  ...new Set([...text.matchAll(MARKER)].map(m => m[1] as string)),
-]
+/** An SVG that is just the JPEG thumbnail, with rounded corners and a hairline edge. */
+export function thumbSvg(jpegBase64: string, width: number, height: number): string {
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `<defs><clipPath id="r"><rect width="${width}" height="${height}" rx="10"/></clipPath></defs>`,
+    `<image clip-path="url(#r)" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,${jpegBase64}"/>`,
+    `<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="10" fill="none" stroke="rgba(127,127,127,0.45)"/>`,
+    '</svg>',
+  ].join('')
+}
 
 /** What the model reads for one capture. */
 export function details(meta: AppshotMeta, dir: string, text: string): string {

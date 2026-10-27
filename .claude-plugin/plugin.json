@@ -1,10 +1,11 @@
 {
   "name": "appshot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Appshots for Claude: attach your frontmost window (image + text) from a Hammerspoon hotkey or /appshot",
   "author": {
     "name": "malawllaqi"
   },
-  "repository": "https://github.com/malawllaqi/claude-appshot"
+  "repository": "https://github.com/malawllaqi/claude-appshot",
+  "types": "./types/index.d.ts"
 }

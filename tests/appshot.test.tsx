@@ -157,6 +157,28 @@ test('a capture shows as a thumbnail and goes with the next message', async ($, 
   expect(w.submits.at(-1)?.context).toBeUndefined()
 })
 
+test('the band keeps only the newest 3 captures', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w = world(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const ids = [1, 2, 3, 4, 5].map(n => `20261027-15301${n}-ab12`)
+  for (const id of ids) {
+    w.drop({ ...META, id, title: `Tab ${id}` })
+    await clock.advance(250)
+  }
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  for (const id of ids.slice(0, 2)) expect(await ui.find({ key: `remove-${id}` })).toBeUndefined()
+  for (const id of ids.slice(2)) expect(await ui.find({ key: `remove-${id}` })).toBeDefined()
+  await ui.unmount()
+
+  await $.prompt.submit(submit('which tabs?'))
+  const context = w.submits.at(-1)?.context ?? []
+  expect(context.length).toBe(3)
+  expect(context.map(block => block.slice(8, 28))).toEqual(ids.slice(2))
+})
+
 test('Remove drops a capture before it is sent', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w = world(on)

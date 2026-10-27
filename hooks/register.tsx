@@ -26,6 +26,8 @@ const DEFAULT_QUESTION = 'Here is an appshot of a window on my Mac. Look at it a
 const WAIT_FOR_HELPER_MS = 8000
 // How often the inbox is listed: one directory read, cheap enough to do often.
 const POLL_MS = 250
+// The band keeps the newest captures only; an older one drops off unsent.
+const MAX_PENDING = 3
 // Thumbnail sizes: a JPEG for the remote surfaces' Svg, a PNG for the terminal.
 const THUMB_SIDES = [480, 320, 200]
 const THUMB_PNG_SIDE = 320
@@ -119,7 +121,9 @@ async function deliver($: EngineInterface, p: Paths, meta: AppshotMeta): Promise
 
   if (asked?.question === undefined && hasPrompt) {
     const shot = await makeThumbs($, dir, meta)
-    await update($, pending, list => [...list.filter(one => one.id !== shot.id), shot])
+    await update($, pending, list =>
+      [...list.filter(one => one.id !== shot.id), shot].slice(-MAX_PENDING),
+    )
     $.ui.toast(`Appshot attached: ${shot.label}. It goes with your next message.`)
     return
   }

@@ -155,20 +155,45 @@ local function windowText(win)
   return text, found
 end
 
-local function saveImage(win, path)
+local function fileExists(path) return hs.fs.attributes(path, "mode") == "file" end
+
+-- Writes the window's PNG. macOS's own screencapture is much faster than
+-- encoding hs.image's Retina bitmap (about 0.2 s against 2.4 s); the
+-- snapshot is the fallback where screencapture cannot run.
+local function writeWindowPng(win, path, lap)
+  local id = win:id()
+  if id then
+    hs.execute("/usr/sbin/screencapture -x -o -l" .. id .. " -t png " .. shellQuote(path))
+    lap("screencapture")
+    if fileExists(path) then return true end
+  end
   local img = win:snapshot()
-  if not img then return nil end
-  if not img:saveToFile(path) then return nil end
+  lap("snapshot")
+  return img ~= nil and img:saveToFile(path) and fileExists(path)
+end
+
+local function saveImage(win, path, lap)
+  if not writeWindowPng(win, path, lap) then return nil end
   local side = M.config.maxImageSide
   hs.execute("/usr/bin/sips -Z " .. side .. " " .. shellQuote(path) .. " >/dev/null 2>&1")
-  -- hs.image sizes are in points; the model wants the file's pixels.
+  lap("resize")
+  -- The file's pixels, as the model will see them.
   local info = hs.execute("/usr/bin/sips -g pixelWidth -g pixelHeight " .. shellQuote(path))
+  lap("measure")
   local w, h = info:match("pixelWidth: (%d+)"), info:match("pixelHeight: (%d+)")
   if w and h then return { w = tonumber(w), h = tonumber(h) } end
-  return img:size()
+  return nil
 end
 
 function M.capture(trigger)
+  -- Milliseconds each step took, kept in meta.json to see where time goes.
+  local clock, timings = hs.timer.secondsSinceEpoch, {}
+  local startedAt, lapAt = clock(), clock()
+  local function lap(name)
+    local now = clock()
+    timings[name] = math.floor((now - lapAt) * 1000 + 0.5)
+    lapAt = now
+  end
   local win = targetWindow()
   if not win then
     hs.alert.show("Appshot: no window to capture")
@@ -181,21 +206,25 @@ function M.capture(trigger)
   local inbox = cfg.root .. "/inbox"
   mkdirp(staging)
   mkdirp(inbox)
+  lap("window")
 
   local imagePath = staging .. "/shot.png"
-  local size = saveImage(win, imagePath)
+  local size = saveImage(win, imagePath, lap)
   if not size then
     hs.alert.show("Appshot: could not capture the window.\nGrant Hammerspoon Screen Recording.")
     log("snapshot failed; screen recording permission is probably missing")
   end
 
   if app then enableAppAccessibility(app) end
+  lap("enableText")
   local okText, text, found = pcall(windowText, win)
   if not okText then
     log("text walk failed:", text)
     text, found = "", {}
   end
   writeFile(staging .. "/text.txt", text)
+  lap("text")
+  timings.total = math.floor((clock() - startedAt) * 1000 + 0.5)
 
   local frame = win:frame()
   local meta = {
@@ -215,6 +244,7 @@ function M.capture(trigger)
     textChars = #text,
     isTextTruncated = found.isTextTruncated or false,
     window = { x = frame.x, y = frame.y, w = frame.w, h = frame.h },
+    timingsMs = timings,
   }
   -- meta.json last, then one rename: the mod never sees a half-written capture.
   writeFile(staging .. "/meta.json", hs.json.encode(meta, true))

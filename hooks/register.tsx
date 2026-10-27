@@ -24,6 +24,8 @@ type Paths = { root: string; inbox: string; claimed: string; expired: string; ac
 
 const DEFAULT_QUESTION = 'Here is an appshot of a window on my Mac. Look at it and tell me what matters.'
 const WAIT_FOR_HELPER_MS = 8000
+// How often the inbox is listed: one directory read, cheap enough to do often.
+const POLL_MS = 250
 // Thumbnail sizes: a JPEG for the remote surfaces' Svg, a PNG for the terminal.
 const THUMB_SIDES = [480, 320, 200]
 const THUMB_PNG_SIDE = 320
@@ -185,7 +187,7 @@ export const register: Register = on => {
     if (e.isInteractive) await markActive($)
 
     timer?.cancel()
-    timer = $.clock.every(1000, () => void poll($))
+    timer = $.clock.every(POLL_MS, () => void poll($))
 
     return started
   })
